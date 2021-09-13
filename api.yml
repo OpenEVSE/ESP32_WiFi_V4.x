@@ -1,0 +1,503 @@
+openapi: 3.0.2
+info:
+  title: OpenEVSE WiFi API
+  description: |
+    The API for the OpenEVSE WiFi module
+  version: '1.0'
+  contact:
+    email: jeremy@bigjungle.net
+    name: Jeremy Poulter
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+servers:
+  - url: '{server}'
+    variables:
+      server:
+        default: 'http://openevse.local'
+  - url: 'http://localhost:8080'
+paths:
+  /status:
+    get:
+      operationId: getStatus
+      summary: Get the EVSE status
+      description: |
+        The status endpoint can be called to get the status of the EVSE.
+
+        While it is posible to poll this endpoint, the recomendatoin is to retrieve the initial 
+        state then use the [/ws](#statusUpdates) 
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./models/Status.yaml
+      tags:
+        - Status
+  /ws:
+    get:
+      operationId: statusUpdates
+      summary: EVSE status updates
+      description: |
+        As the state changes on the EVSE a websocket frame will be sent over the socket. 
+        The frame will contain a JSON document conntaining only the updated state.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./models/Status.yaml
+      tags:
+        - Status
+  /config:
+    get:
+      operationId: getConfig
+      summary: Get the EVSE configuration
+      description: ''
+      tags:
+        - Config
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./models/Config.yaml
+              examples: {}
+    post:
+      operationId: updateConfig
+      responses:
+        '200':
+          $ref: '#/components/responses/UpdateSuccessful'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: ./models/Config.yaml
+            examples:
+              Update EmonCMS setting:
+                value:
+                  emoncms_enabled: true
+                  emoncms_server: 'http://emoncms.org'
+                  emoncms_node: openevse-a7d4
+                  emoncms_apikey: emoncmskey
+                  emoncms_fingerprint: ''
+              Configure Solar divert:
+                value:
+                  divert_enabled: true
+                  divert_attack_smoothing_factor: 0.4
+                  divert_decay_smoothing_factor: 0.05
+                  divert_min_charge_time: 60
+              Set normal charging mode:
+                value:
+                  charge_mode: fast
+              Set Eco mode:
+                value:
+                  charge_mode: eco
+      summary: Update the EVSE configuration
+      tags:
+        - Config
+  /override:
+    get:
+      responses:
+        '200':
+          description: Manual overide is active
+          content:
+            application/json:
+              schema:
+                $ref: ./models/Properties.yaml
+        '404':
+          $ref: '#/components/responses/NotFound'
+      operationId: getManualOverride
+      tags:
+        - Manual Override
+      summary: Get the Manual Override status
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: ./models/Properties.yaml
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+      operationId: setManualOverride
+      tags:
+        - Manual Override
+      summary: Set the manual override
+    patch:
+      description: Toggle the manual override
+      responses:
+        '200':
+          description: OK
+      operationId: toggleManualOverride
+      tags:
+        - Manual Override
+      summary: Toggle the manual Override
+    delete:
+      description: Clears the manual override
+      responses:
+        '200':
+          description: OK
+      operationId: clearManualOverride
+      tags:
+        - Manual Override
+      summary: Clear the manual override
+  /claims:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: ./models/Claim.yaml
+      operationId: listClaims
+      tags:
+        - Claims
+      summary: List EVSE claims
+  '/claims/{client}':
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./models/Properties.yaml
+        '404':
+          $ref: '#/components/responses/NotFound'
+      parameters: []
+      operationId: getClaim
+      tags:
+        - Claims
+      summary: Get EVSE claim information
+    post:
+      description: Make/Update a claim
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: ./models/Properties.yaml
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: setClaim
+      summary: Make/Update an EVSE claim
+      tags:
+        - Claims
+    delete:
+      description: Release a claim
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      operationId: releaseClaim
+      summary: Release an EVSE claim
+      tags:
+        - Claims
+    parameters:
+      - schema:
+          type: integer
+        name: client
+        in: path
+        required: true
+        description: 'The client ID, defined by [OpenEVSE](https://github.com/OpenEVSE/ESP32_WiFi_V4.x/blob/master/src/evse_man.h#L25)'
+  /schedule:
+    get:
+      summary: List schedule events
+      description: This will get a complete list of events in the schedule
+      responses:
+        '200':
+          description: List of the schedule events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: ./models/EvseState.yaml
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: listSchedule
+      tags:
+        - Schedule
+    post:
+      operationId: updateSchedule
+      description: Perform multiple event updates
+      responses:
+        '201':
+          description: item created
+        '400':
+          description: 'invalid input, object invalid'
+        '409':
+          description: an existing item already exists
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: ./models/EvseState.yaml
+            examples:
+              example-1:
+                value:
+                  - id: 1
+                    state: active
+                    time: '14:15:22Z'
+                    days:
+                      - monday
+        description: Inventory item to add
+      tags:
+        - Schedule
+      summary: Batch update schedule
+  '/schedule/{id}':
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        description: Numeric ID of the event
+    get:
+      summary: Get event details
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./models/EvseState.yaml
+      operationId: getScheduleEvent
+      tags:
+        - Schedule
+    post:
+      responses:
+        '200':
+          $ref: '#/components/responses/UpdateSuccessful'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: ./models/EvseState.yaml
+        description: ''
+      operationId: setScheduleEvent
+      tags:
+        - Schedule
+      summary: Update event details
+    delete:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+              examples: {}
+      operationId: removeScheduleEvent
+      tags:
+        - Schedule
+      summary: Remove event
+  /logs:
+    get:
+      summary: Get event block information
+      tags:
+        - Event Log
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  min:
+                    type: integer
+                  max:
+                    type: integer
+      operationId: getEventBlockInfo
+      description: 'Retrieve the start and end indexes of the log event blocks. Each log event block contains '
+      parameters: []
+    parameters: []
+  '/logs/{index}':
+    get:
+      summary: Get log block events
+      tags:
+        - Event Log
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEvent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      operationId: getEventBlock
+      description: ''
+    parameters:
+      - schema:
+          type: integer
+        name: index
+        in: path
+        required: true
+components:
+  schemas:
+    Message:
+      title: Informational message
+      type: object
+      properties:
+        msg:
+          type: string
+          description: The message
+    ScheduleEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        state:
+          $ref: './models/EvseState.yaml'
+        time:
+          type: string
+          format: time
+        days:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - monday
+              - tuesday
+              - wednesday
+              - thursday
+              - friday
+              - saturday
+              - sunday
+      required:
+        - state
+        - time
+        - days
+      title: ''
+    LogEvent:
+      title: LogEvent
+      type: object
+      x-examples:
+        example-1:
+          value:
+            time: '2021-08-24T14:15:22Z'
+            type: information
+            managerState: active
+            evseState: 1
+            evseFlags: 123
+            pilot: 32
+            energy: 1234.5
+            elapsed: 123456
+            temperature: 35.4
+            tempuratureMax: 50.4
+            divertMode: 1
+      properties:
+        time:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - information
+            - notification
+            - warning
+        managerState:
+          $ref: './models/EvseState.yaml'
+        evseState:
+          type: integer
+          minimum: 0
+          maximum: 255
+        evseFlags:
+          type: integer
+          format: int32
+        pilot:
+          type: integer
+          format: int32
+          minimum: 0
+        energy:
+          type: number
+          format: double
+          minimum: 0
+        elapsed:
+          type: integer
+          format: int32
+          minimum: 0
+        temperature:
+          type: number
+          format: double
+        tempuratureMax:
+          type: number
+          format: double
+        divertMode:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2
+          exclusiveMaximum: false
+  responses:
+    UpdateSuccessful:
+      description: Update successful
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Message'
+          examples:
+            Success message:
+              value:
+                msg: done
+    NotFound:
+      description: Example response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Message'
+          examples:
+            Not found:
+              value:
+                msg: Not found
+    BadRequest:
+      description: Example response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Message'
+          examples:
+            Bad JSON:
+              value:
+                msg: Could not parse JSON
+  parameters: {}
+tags:
+  - name: Claims
+  - name: Config
+  - name: Event Log
+  - name: Manual Override
+  - name: Schedule
+  - name: Status
